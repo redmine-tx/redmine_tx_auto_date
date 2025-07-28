@@ -1,0 +1,268 @@
+<%= labelled_fields_for :issue, @issue do |f| %>
+
+    <div class="splitcontent">
+    <div class="splitcontentleft">
+    <% if @issue.safe_attribute?('status_id') && @allowed_statuses.present? %>
+    <p>
+      <%= f.select :status_id, (@allowed_statuses.collect {|p| [p.name, p.id]}), {:required => true},
+        :onchange => "updateIssueFrom('#{escape_javascript(update_issue_form_path(@project, @issue))}', this)",
+        :title => @issue.status.description %>
+      <%= content_tag 'a', sprite_icon('help', l(:label_open_issue_statuses_description)), :class => 'icon-only icon-help', :title => l(:label_open_issue_statuses_description), :onclick => "showModal('issue_statuses_description', '500px'); return false;", :href => '#' if @allowed_statuses.any? {|s| s.description.present? } %>
+      <% if @issue.transition_warning %>
+        <span class="icon-only icon-warning" title="<%= @issue.transition_warning %>"><%= sprite_icon('warning', l(:notice_issue_not_closable_by_open_tasks)) %></span>
+      <% end %>
+    </p>
+    <%= render partial: 'issues/issue_status_description', locals: { issue_statuses: @allowed_statuses } %>
+    <%= hidden_field_tag 'was_default_status', @issue.status_id, :id => nil if @issue.status == @issue.default_status %>
+    <% else %>
+    <p><label><%= l(:field_status) %></label> <%= @issue.status %></p>
+    <% end %>
+    
+    <% if @issue.safe_attribute? 'priority_id' %>
+    <p><%= f.select :priority_id, (@priorities.collect {|p| [p.name, p.id]}), {:required => true} %></p>
+    <% end %>
+    
+    <% if @issue.safe_attribute? 'assigned_to_id' %>
+    <p>
+      <%= f.select :assigned_to_id, principals_options_for_select(@issue.assignable_users, @issue.assigned_to),
+                      :include_blank => true, :required => @issue.required_attribute?('assigned_to_id') %>
+      <% if @issue.assignable_users.include?(User.current) %>
+        <a class="assign-to-me-link<%= ' hidden' if @issue.assigned_to_id == User.current.id %>" href="#" data-id="<%= User.current.id %>"><%= l(:label_assign_to_me) %></a>
+      <% end %>
+    </p>
+    <% end %>
+    
+    <% if @issue.safe_attribute?('category_id') && (category_options = @issue.project.issue_categories.pluck(:name, :id)).present? %>
+    <p><%= f.select :category_id, category_options,
+                    {:include_blank => true, :required => @issue.required_attribute?('category_id')},
+                     :onchange => ("updateIssueFrom('#{escape_javascript(update_issue_form_path(@project, @issue))}', this)" if @issue.new_record?) %>
+    <%= link_to(sprite_icon('add', l(:label_issue_category_new)),
+                new_project_issue_category_path(@issue.project),
+                :remote => true,
+                :method => 'get',
+                :title => l(:label_issue_category_new),
+                :tabindex => 200,
+                :class => 'icon-only icon-add'
+               ) if User.current.allowed_to?(:manage_categories, @issue.project) %></p>
+    <% end %>
+    
+    <% if @issue.safe_attribute?('fixed_version_id') && @issue.assignable_versions.any? %>
+    <p><%= f.select :fixed_version_id, version_options_for_select(@issue.assignable_versions, @issue.fixed_version),
+                    :include_blank => true, :required => @issue.required_attribute?('fixed_version_id') %>
+    <%= link_to(sprite_icon('add', l(:label_version_new)),
+                new_project_version_path(@issue.project),
+                :remote => true,
+                :method => 'get',
+                :title => l(:label_version_new),
+                :tabindex => 200,
+                :class => 'icon-only icon-add'
+               ) if User.current.allowed_to?(:manage_versions, @issue.project) %>
+    </p>
+    <% end %>
+    </div>
+    
+    <div class="splitcontentright">
+    <% if @issue.safe_attribute? 'parent_issue_id' %>
+    <p id="parent_issue"><%= f.text_field :parent_issue_id, :size => 10,
+                                          :required => @issue.required_attribute?('parent_issue_id'),
+                                          :onchange => "updateIssueFrom('#{escape_javascript update_issue_form_path(@project, @issue)}', this)" %></p>
+    <%= javascript_tag "observeAutocompleteField('issue_parent_issue_id', '#{escape_javascript(auto_complete_issues_path(:project_id => @issue.project, :scope => Setting.cross_project_subtasks, :status => @issue.closed? ? 'c' : 'o', :issue_id => @issue.id))}')" %>
+    <% end %>
+    
+    <% if @issue.safe_attribute? 'start_date' %>
+    <p>
+      <%= f.date_field :start_date, :size => 10, :required => @issue.required_attribute?('start_date') %>
+      <span class="quick-date">
+        <button type="button" onclick="setToday()">TODAY</button>
+        <button type="button" onclick="adjustDate(-1)">-</button>
+        <button type="button" onclick="adjustDate(1)">+</button>
+      </span>
+      <%= calendar_for('issue_start_date') %>
+    </p>
+    <% end %>
+    
+    <% if @issue.safe_attribute? 'due_date' %>
+    <p id="due_date_area">
+      <%= f.date_field(:due_date, :size => 10, :required => @issue.required_attribute?('due_date')) %>
+      <%= calendar_for('issue_due_date') %>
+    </p>
+    <% end %>
+    
+    <% if @issue.safe_attribute? 'estimated_hours' %>
+    <p>
+      <%= f.hours_field :estimated_hours, :size => 6, :required => @issue.required_attribute?('estimated_hours') %> 
+      <%= l(:field_hours) %>
+      <span id="estimated_days"></span>
+      <span class="quick-hours">
+        <button type="button" onclick="setHours(4)">0.5d</button>
+        <button type="button" onclick="setHours(8)">1d</button>
+        <button type="button" onclick="setHours(16)">2d</button>
+        <button type="button" onclick="setHours(24)">3d</button>
+        <button type="button" onclick="setHours(32)">4d</button>
+        <button type="button" onclick="adjustHours(-8)">-</button>
+        <button type="button" onclick="adjustHours(8)">+</button>
+      </span>
+    </p>
+    <% end %>
+    
+    <% if @issue.safe_attribute?('done_ratio') && Issue.use_field_for_done_ratio? %>
+    <p><%= f.select :done_ratio, ((0..100).step(Setting.issue_done_ratio_interval.to_i).to_a.collect {|r| ["#{r} %", r]}), :required => @issue.required_attribute?('done_ratio') %></p>
+    <% end %>
+    </div>
+    </div>
+    
+    <% if @issue.safe_attribute? 'custom_field_values' %>
+    <%= render :partial => 'issues/form_custom_fields' %>
+    <% end %>
+    
+    <% end %>
+    
+    <% include_calendar_headers_tags %>
+    
+<script>
+function updateEstimatedDays() {
+  var hours = parseFloat(document.getElementById('issue_estimated_hours').value) || 0;
+  var days = Math.ceil(hours / 8);
+  var daysSpan = document.getElementById('estimated_days');
+  daysSpan.textContent = `(${days}일)`;
+}
+
+function setHours(hours) {
+  document.getElementById('issue_estimated_hours').value = hours;
+  updateEstimatedDays();
+  updateDueDate();
+}
+
+function adjustHours(delta) {
+  var input = document.getElementById('issue_estimated_hours');
+  var currentHours = parseFloat(input.value) || 0;
+  var newHours = Math.max(0, currentHours + delta);
+  input.value = newHours;
+  updateEstimatedDays();
+  updateDueDate();
+}
+
+function setToday() {
+  var date = new Date();
+  
+  // 주말인 경우 다음 평일로 이동
+  while (date.getDay() === 0 || date.getDay() === 6) {
+    date.setDate(date.getDate() + 1);
+  }
+  
+  // YYYY-MM-DD 형식으로 변환
+  var year = date.getFullYear();
+  var month = String(date.getMonth() + 1).padStart(2, '0');
+  var day = String(date.getDate()).padStart(2, '0');
+  var formattedDate = `${year}-${month}-${day}`;
+  
+  document.getElementById('issue_start_date').value = formattedDate;
+  updateDueDate();
+}
+
+function adjustDate(delta) {
+  var input = document.getElementById('issue_start_date');
+  var date;
+  
+  try {
+    if (!input.value) {
+      date = new Date();
+    } else {
+      date = new Date(input.value);
+      // 유효하지 않은 날짜인 경우
+      if (isNaN(date.getTime())) {
+        date = new Date();
+      } else {
+        date.setDate(date.getDate() + delta);
+      }
+    }
+  } catch (e) {
+    date = new Date();
+  }
+  
+  // 주말인 경우 다음/이전 평일로 이동
+  while (date.getDay() === 0 || date.getDay() === 6) {
+    date.setDate(date.getDate() + delta);
+  }
+  
+  // YYYY-MM-DD 형식으로 변환
+  var year = date.getFullYear();
+  var month = String(date.getMonth() + 1).padStart(2, '0');
+  var day = String(date.getDate()).padStart(2, '0');
+  var formattedDate = `${year}-${month}-${day}`;
+  
+  input.value = formattedDate;
+  updateDueDate();
+}
+
+function updateDueDate() {
+  var startDate = document.getElementById('issue_start_date').value;
+  var estimatedHours = parseFloat(document.getElementById('issue_estimated_hours').value) || 0;
+  
+  if (!startDate || !estimatedHours) return;
+  
+  var dueDate = new Date(startDate);
+  
+  if (estimatedHours <= 8) {
+    // 8시간 이하면 같은 날로 설정
+    document.getElementById('issue_due_date').value = startDate;
+    return;
+  }
+  
+  // 8시간당 1일로 계산
+  var days = Math.ceil(estimatedHours / 8) - 1;
+  
+  // 주말을 제외한 일수 계산
+  var currentDate = new Date(startDate);
+  var workingDays = 0;
+  
+  while (workingDays < days) {
+    currentDate.setDate(currentDate.getDate() + 1);
+    // 주말(토,일)이 아닌 경우에만 workingDays 증가
+    if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) {
+      workingDays++;
+    }
+  }
+  
+  // YYYY-MM-DD 형식으로 변환
+  var year = currentDate.getFullYear();
+  var month = String(currentDate.getMonth() + 1).padStart(2, '0');
+  var day = String(currentDate.getDate()).padStart(2, '0');
+  var formattedDate = `${year}-${month}-${day}`;
+  
+  document.getElementById('issue_due_date').value = formattedDate;
+}
+
+// start_date 변경 이벤트 리스너 추가
+document.addEventListener('DOMContentLoaded', function() {
+  var startDateInput = document.getElementById('issue_start_date');
+  if (startDateInput) {
+    startDateInput.addEventListener('change', updateDueDate);
+  }
+  updateEstimatedDays();
+  var hoursInput = document.getElementById('issue_estimated_hours');
+  if (hoursInput) {
+    hoursInput.addEventListener('change', updateEstimatedDays);
+  }
+});
+</script>
+
+<style>
+.quick-hours {
+  margin-left: 10px;
+}
+.quick-hours button {
+  margin: 0 2px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+.quick-date {
+  margin-left: 10px;
+}
+.quick-date button {
+  margin: 0 2px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+</style>
+    

@@ -1,0 +1,6 @@
+# English strings go here for Rails i18n
+en:
+  # my_label: "My label"
+  field_begin_time: Begin Time
+  field_end_time: End Time
+  field_worker: Worker ID

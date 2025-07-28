@@ -1,0 +1,21 @@
+<%
+	begin_end_string = issue.begin_time ? "#{format_time( issue.begin_time )} ~ " : '' 
+
+	if issue.begin_time && issue.end_time then
+		if issue.begin_time.to_date != issue.end_time.to_date then
+			begin_end_string += "#{ issue.end_time.localtime.strftime('%Y-%m-%d %H:%M') }"
+    elsif issue.begin_time != issue.end_time then
+      begin_end_string += "#{ issue.end_time.localtime.strftime('%H:%M') }"
+    end
+
+		begin_end_string += " (#{distance_of_time_in_words(issue.end_time - issue.begin_time)})"
+	end
+
+  worker = User.where(id: issue.worker_id).first
+  worker_name = worker ? link_to_principal(worker) : ''
+%>
+
+<%= issue_fields_rows do |rows|
+    rows.left '작업자', worker_name.html_safe
+    rows.right '작업기간', begin_end_string.html_safe
+  end %>
