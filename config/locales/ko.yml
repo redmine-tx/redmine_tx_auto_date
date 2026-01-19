@@ -1,6 +1,6 @@
-# English strings go here for Rails i18n
+# Korean strings for tx_auto_date plugin
 ko:
-  # my_label: "My label"
-  field_begin_time: 작업시작시간
-  field_end_time: 작업완료시간
-  field_worker: 작업자ID
+  field_worker: "작업자"
+  field_begin_time: "작업 시작 시간"
+  field_end_time: "작업 완료 시간"
+  field_confirm_time: "검토 시작 시간"
