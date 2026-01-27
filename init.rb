@@ -19,6 +19,15 @@ end
 Rails.application.config.after_initialize do
   require_dependency File.expand_path('../lib/redmine_tx_auto_date_helper.rb', __FILE__)
   require_dependency File.expand_path('../lib/redmine_tx_auto_date/patches/issue_patch.rb', __FILE__)
-  require_dependency File.expand_path('../lib/redmine_tx_auto_date/patches/issue_query_patch.rb', __FILE__)
   require_dependency File.expand_path('../lib/redmine_tx_auto_date/patches/issues_helper_patch.rb', __FILE__)
+
+  TxBaseHelper.register_issue_query_columns do
+    timestamp_column :begin_time, filter: :date_past
+    timestamp_column :end_time, filter: :date_past
+    timestamp_column :confirm_time, filter: :date_past
+
+    column :worker, sortable: -> { User.fields_for_order_statement("workers") }
+
+    filter :worker_id, type: :list_optional_with_history, values: -> { assigned_to_values }
+  end
 end
