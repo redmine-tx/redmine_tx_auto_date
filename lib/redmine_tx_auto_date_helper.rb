@@ -19,7 +19,12 @@ module RedmineTxAutoDateHelper
           if issue.id && issue.end_time.blank? && issue.status.is_implemented?
             prev_issue = Issue.find(issue.id)
             issue.end_time = DateTime.now
-            issue.worker_id = prev_issue.assigned_to_id
+            issue.worker_id =
+              if !prev_issue.status.is_in_progress? && !prev_issue.status.is_implemented?
+                User.current.id
+              else
+                issue.worker_id || prev_issue.worker_id || prev_issue.assigned_to_id
+              end
           end
 
           # 컨펌 시작 시간 설정
