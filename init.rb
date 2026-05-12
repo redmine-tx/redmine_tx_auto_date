@@ -26,7 +26,7 @@ Rails.application.config.after_initialize do
     timestamp_column :end_time, filter: :date_past
     timestamp_column :confirm_time, filter: :date_past
 
-    column :worker, sortable: -> { User.fields_for_order_statement("workers") }
+    user_column :worker, join_alias: :workers, filter: false
 
     filter :worker_id, type: :list_optional_with_history, values: -> { assigned_to_values }
   end
