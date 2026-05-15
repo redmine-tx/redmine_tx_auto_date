@@ -303,7 +303,7 @@ class RedmineTxAutoDateWorkerSequenceTest < ActiveSupport::TestCase
     @new_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_NEW)
     @in_progress_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_IN_PROGRESS)
     @implemented_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_IMPLEMENTED)
-    @planning_review_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_PLANNING_REVIEW)
+    @planning_review_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_REVIEW)
     @qa_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_QA)
     @completed_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_COMPLETED)
 
