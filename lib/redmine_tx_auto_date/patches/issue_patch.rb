@@ -40,7 +40,7 @@ module RedmineTxAutoDate
               new_status_id = detail_status_id.value.to_i
 
               # 작업 시작한 경우
-              if ( detail_status_id && !tx_auto_date_work_in_progress_status_id?( old_status_id ) && tx_auto_date_work_in_progress_status_id?( new_status_id ) ) then
+              if ( detail_status_id && !IssueStatus.is_in_progress?( old_status_id ) && IssueStatus.is_in_progress?( new_status_id ) ) then
                 new_begin_time = journal.created_on
                 if detail_assigned_to_id then
                   new_worker_id = _new_assigned_to_id
@@ -53,7 +53,7 @@ module RedmineTxAutoDate
               is_implemented = ( detail_status_id && !IssueStatus.is_implemented?( old_status_id ) && IssueStatus.is_implemented?( new_status_id ) )
               is_directly_implemented = (
                 is_implemented &&
-                !tx_auto_date_work_in_progress_status_id?( old_status_id )
+                !IssueStatus.is_in_progress?( old_status_id )
               )
 
               # 작업 종료한 경우
@@ -69,7 +69,7 @@ module RedmineTxAutoDate
           end
 
           # 현재 작업중인 경우면 작업자 설정
-          if tx_auto_date_work_in_progress_status_id?( self.status_id ) && !IssueStatus.is_implemented?( self.status_id ) then
+          if IssueStatus.is_in_progress?( self.status_id ) && !IssueStatus.is_implemented?( self.status_id ) then
             new_worker_id = self.assigned_to_id
             new_begin_time = self.created_on if new_begin_time.nil?
             new_end_time = nil
@@ -105,12 +105,6 @@ module RedmineTxAutoDate
           self.begin_time = new_begin_time
           self.end_time = new_end_time
         end
-      end
-
-      private
-
-      def tx_auto_date_work_in_progress_status_id?(status_id)
-        IssueStatus.is_in_progress?(status_id) && !IssueStatus.is_in_review?(status_id)
       end
     end
   end

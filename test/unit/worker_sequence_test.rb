@@ -63,18 +63,18 @@ class RedmineTxAutoDateWorkerSequenceTest < ActiveSupport::TestCase
     assert_not_nil issue.end_time
   end
 
-  def test_hook_planning_review_does_not_create_worker_period
+  def test_hook_scoping_does_not_create_worker_period
     issue = build_issue(status: @new_status, assigned_to: @planner)
 
     User.current = @planner
-    issue.status = @planning_review_status
+    issue.status = @scoping_status
 
     @hook.controller_issues_edit_before_save(issue: issue)
 
     assert_nil issue.worker_id
     assert_nil issue.begin_time
     assert_nil issue.end_time
-    assert_not_nil issue.confirm_time
+    assert_nil issue.confirm_time
   end
 
   def test_hook_review_pingpong_preserves_worker_when_reviewer_restarts_progress
@@ -87,17 +87,18 @@ class RedmineTxAutoDateWorkerSequenceTest < ActiveSupport::TestCase
     )
 
     User.current = @developer
-    issue.status = @planning_review_status
+    issue.status = @review_status
     issue.assigned_to = @qa
 
     @hook.controller_issues_edit_before_save(issue: issue)
 
     assert_equal @developer.id, issue.worker_id
-    assert_nil issue.begin_time
+    assert_time_equal started_at, issue.begin_time
     assert_nil issue.end_time
+    assert_not_nil issue.confirm_time
 
     issue.update_columns(
-      status_id: @planning_review_status.id,
+      status_id: @review_status.id,
       assigned_to_id: @qa.id,
       worker_id: issue.worker_id,
       begin_time: issue.begin_time,
@@ -112,7 +113,7 @@ class RedmineTxAutoDateWorkerSequenceTest < ActiveSupport::TestCase
     @hook.controller_issues_edit_before_save(issue: issue)
 
     assert_equal @developer.id, issue.worker_id
-    assert_not_nil issue.begin_time
+    assert_time_equal started_at, issue.begin_time
     assert_nil issue.end_time
   end
 
@@ -215,13 +216,13 @@ class RedmineTxAutoDateWorkerSequenceTest < ActiveSupport::TestCase
       issue,
       user: @developer,
       created_on: review_at,
-      status: [@in_progress_status, @planning_review_status]
+      status: [@in_progress_status, @review_status]
     )
     add_journal(
       issue,
       user: @qa,
       created_on: rework_at,
-      status: [@planning_review_status, @in_progress_status]
+      status: [@review_status, @in_progress_status]
     )
     add_journal(
       issue,
@@ -234,12 +235,12 @@ class RedmineTxAutoDateWorkerSequenceTest < ActiveSupport::TestCase
     issue.reload
 
     assert_equal @developer.id, issue.worker_id
-    assert_time_equal rework_at, issue.begin_time
+    assert_time_equal started_at, issue.begin_time
     assert_time_equal implemented_at, issue.end_time
   end
 
-  def test_recalculation_planning_review_to_implemented_is_treated_as_direct_implementation
-    reviewed_at = Time.zone.local(2026, 5, 12, 9, 0, 0)
+  def test_recalculation_scoping_to_implemented_is_treated_as_direct_implementation
+    scoped_at = Time.zone.local(2026, 5, 12, 9, 0, 0)
     implemented_at = Time.zone.local(2026, 5, 12, 11, 0, 0)
     issue = build_issue(
       status: @implemented_status,
@@ -250,15 +251,15 @@ class RedmineTxAutoDateWorkerSequenceTest < ActiveSupport::TestCase
     add_journal(
       issue,
       user: @planner,
-      created_on: reviewed_at,
-      status: [@new_status, @planning_review_status],
+      created_on: scoped_at,
+      status: [@new_status, @scoping_status],
       assigned_to: [@planner, @planner]
     )
     add_journal(
       issue,
       user: @developer,
       created_on: implemented_at,
-      status: [@planning_review_status, @implemented_status],
+      status: [@scoping_status, @implemented_status],
       assigned_to: [@planner, @qa]
     )
 
@@ -296,18 +297,18 @@ class RedmineTxAutoDateWorkerSequenceTest < ActiveSupport::TestCase
     @new_status = IssueStatus.find(1)
     @in_progress_status = IssueStatus.find(2)
     @implemented_status = IssueStatus.find(3)
-    @planning_review_status = IssueStatus.find(4)
-    @qa_status = IssueStatus.find(5)
+    @review_status = IssueStatus.find(4)
+    @scoping_status = IssueStatus.find(5)
     @completed_status = IssueStatus.find(6)
 
     @new_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_NEW)
     @in_progress_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_IN_PROGRESS)
     @implemented_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_IMPLEMENTED)
-    @planning_review_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_REVIEW)
-    @qa_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_QA)
+    @review_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_REVIEW)
+    @scoping_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_SCOPING)
     @completed_status.update_columns(stage: TxAdvancedIssueStatusHelper::STAGE_COMPLETED)
 
-    [@new_status, @in_progress_status, @implemented_status, @planning_review_status, @qa_status, @completed_status].each(&:reload)
+    [@new_status, @in_progress_status, @implemented_status, @review_status, @scoping_status, @completed_status].each(&:reload)
     reset_issue_status_stage_cache
   end
 
