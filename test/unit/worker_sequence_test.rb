@@ -77,6 +77,45 @@ class RedmineTxAutoDateWorkerSequenceTest < ActiveSupport::TestCase
     assert_not_nil issue.confirm_time
   end
 
+  def test_hook_review_pingpong_preserves_worker_when_reviewer_restarts_progress
+    started_at = Time.zone.local(2026, 5, 12, 9, 0, 0)
+    issue = build_issue(
+      status: @in_progress_status,
+      assigned_to: @developer,
+      worker: @developer,
+      begin_time: started_at
+    )
+
+    User.current = @developer
+    issue.status = @planning_review_status
+    issue.assigned_to = @qa
+
+    @hook.controller_issues_edit_before_save(issue: issue)
+
+    assert_equal @developer.id, issue.worker_id
+    assert_nil issue.begin_time
+    assert_nil issue.end_time
+
+    issue.update_columns(
+      status_id: @planning_review_status.id,
+      assigned_to_id: @qa.id,
+      worker_id: issue.worker_id,
+      begin_time: issue.begin_time,
+      end_time: issue.end_time,
+      confirm_time: issue.confirm_time
+    )
+    issue.reload
+
+    User.current = @qa
+    issue.status = @in_progress_status
+
+    @hook.controller_issues_edit_before_save(issue: issue)
+
+    assert_equal @developer.id, issue.worker_id
+    assert_not_nil issue.begin_time
+    assert_nil issue.end_time
+  end
+
   def test_hook_reopened_implemented_issue_to_progress_clears_end_and_uses_current_assignee
     started_at = Time.zone.local(2026, 5, 12, 9, 0, 0)
     finished_at = Time.zone.local(2026, 5, 12, 11, 0, 0)
@@ -152,6 +191,50 @@ class RedmineTxAutoDateWorkerSequenceTest < ActiveSupport::TestCase
 
     assert_equal @developer.id, issue.worker_id
     assert_time_equal started_at, issue.begin_time
+    assert_time_equal implemented_at, issue.end_time
+  end
+
+  def test_recalculation_review_pingpong_preserves_original_worker
+    started_at = Time.zone.local(2026, 5, 12, 9, 0, 0)
+    review_at = Time.zone.local(2026, 5, 12, 10, 0, 0)
+    rework_at = Time.zone.local(2026, 5, 12, 10, 30, 0)
+    implemented_at = Time.zone.local(2026, 5, 12, 12, 0, 0)
+    issue = build_issue(
+      status: @implemented_status,
+      assigned_to: @developer,
+      done_ratio: 100
+    )
+
+    add_journal(
+      issue,
+      user: @developer,
+      created_on: started_at,
+      status: [@new_status, @in_progress_status]
+    )
+    add_journal(
+      issue,
+      user: @developer,
+      created_on: review_at,
+      status: [@in_progress_status, @planning_review_status]
+    )
+    add_journal(
+      issue,
+      user: @qa,
+      created_on: rework_at,
+      status: [@planning_review_status, @in_progress_status]
+    )
+    add_journal(
+      issue,
+      user: @developer,
+      created_on: implemented_at,
+      status: [@in_progress_status, @implemented_status]
+    )
+
+    issue.update_auto_date!
+    issue.reload
+
+    assert_equal @developer.id, issue.worker_id
+    assert_time_equal rework_at, issue.begin_time
     assert_time_equal implemented_at, issue.end_time
   end
 

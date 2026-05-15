@@ -44,7 +44,8 @@ module RedmineTxAutoDate
                 new_begin_time = journal.created_on
                 if detail_assigned_to_id then
                   new_worker_id = _new_assigned_to_id
-                else
+                # 검수 반려로 다시 진행중이 된 경우에는 검수자를 작업자로 덮어쓰지 않는다.
+                elsif !(IssueStatus.is_in_review?( old_status_id ) && new_worker_id.present?)
                   new_worker_id = journal.user_id
                 end
               end

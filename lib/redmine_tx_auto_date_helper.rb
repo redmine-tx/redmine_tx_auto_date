@@ -8,16 +8,23 @@ module RedmineTxAutoDateHelper
         if true then
           
           issue = context[:issue]
+          prev_issue = issue.id ? Issue.find(issue.id) : nil
 
           # 시작 시간 자동 설정
-          if issue.begin_time.blank? && issue.status.is_in_progress?
+          restarted_from_review = prev_issue && prev_issue.status.is_in_review? && issue.status.is_in_progress?
+          worker_id_for_progress =
+            if restarted_from_review && prev_issue.worker_id.present?
+              prev_issue.worker_id
+            else
+              issue.assigned_to_id
+            end
+          if (issue.begin_time.blank? || restarted_from_review) && issue.status.is_in_progress?
             issue.begin_time = DateTime.now
-            issue.worker_id = issue.assigned_to_id
+            issue.worker_id = worker_id_for_progress
           end
 
           # 종료 시간 자동 설정
           if issue.id && issue.end_time.blank? && issue.status.is_implemented?
-            prev_issue = Issue.find(issue.id)
             issue.end_time = DateTime.now
             issue.worker_id =
               if !prev_issue.status.is_in_progress? && !prev_issue.status.is_implemented?
@@ -38,7 +45,7 @@ module RedmineTxAutoDateHelper
 
             # 작업 상태면 작업자 설정
             if issue.status.is_in_progress? then
-              issue.worker_id = issue.assigned_to_id
+              issue.worker_id = worker_id_for_progress
             else
               if !issue.status.is_in_review? then
                 issue.worker_id = nil
@@ -54,7 +61,7 @@ module RedmineTxAutoDateHelper
           if !issue.status.is_in_progress? && !issue.status.is_implemented? then
             issue.begin_time = nil
             issue.end_time = nil
-            issue.worker_id = nil
+            issue.worker_id = issue.status.is_in_review? ? (issue.worker_id || prev_issue&.worker_id) : nil
           end
         end
 
