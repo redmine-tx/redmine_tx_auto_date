@@ -1,6 +1,6 @@
-# English strings go here for Rails i18n
+# English strings for tx_auto_date plugin
 en:
-  # my_label: "My label"
-  field_begin_time: Begin Time
-  field_end_time: End Time
-  field_worker: Worker ID
+  field_worker: "Worker"
+  field_begin_time: "Work Started At"
+  field_end_time: "Work Finished At"
+  field_confirm_time: "Review Started At"

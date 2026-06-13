@@ -1,72 +1,10 @@
 module RedmineTxAutoDateHelper
     class Hooks < Redmine::Hook::ViewListener
-
+      # 일감 상세 하단에 작업자/작업기간 표시
       render_on :view_issues_show_details_bottom, partial: 'issues/tx_auto_date'
 
-      def controller_issues_edit_before_save(context={})
-        
-        if true then
-
-          issue = context[:issue]
-          prev_issue = issue.id ? Issue.find(issue.id) : nil
-          worker_id_for_progress = issue.assigned_to_id
-
-          # 시작 시간 자동 설정
-          if issue.begin_time.blank? && issue.status.is_in_progress?
-            issue.begin_time = DateTime.now
-            issue.worker_id = worker_id_for_progress
-          end
-
-          # 종료 시간 자동 설정
-          if issue.id && issue.end_time.blank? && issue.status.is_implemented?
-            issue.end_time = DateTime.now
-            issue.worker_id =
-              if !prev_issue.status.is_in_progress? && !prev_issue.status.is_implemented?
-                User.current.id
-              else
-                issue.worker_id || prev_issue.worker_id || prev_issue.assigned_to_id
-              end
-          end
-
-          # 컨펌 시작 시간 설정
-          if issue.confirm_time.blank? && issue.status.is_in_review?
-            issue.confirm_time = DateTime.now
-          end
-
-          if issue.end_time.present? && !issue.status.is_implemented?
-            # 완료 상태가 아니면 완료시간 삭제
-            issue.end_time = nil
-
-            # 작업 상태면 작업자 설정
-            if issue.status.is_in_progress? then
-              issue.worker_id = worker_id_for_progress
-            else
-              if !issue.status.is_in_review? then
-                issue.worker_id = nil
-              end
-            end
-          end
-
-          # 완료시간이 있는데 시작시간이 없으면 시작시간을 완료시간으로 설정
-          if issue.end_time.present? && issue.begin_time.blank? then
-            issue.begin_time = issue.end_time
-          end
-
-          if !issue.status.is_in_progress? && !issue.status.is_implemented? then
-            issue.begin_time = nil
-            issue.end_time = nil
-            issue.worker_id = nil
-          end
-        end
-
-      end
-
-      def controller_issues_new_before_save(context={})
-        controller_issues_edit_before_save(context)
-      end
-
-      def controller_issues_bulk_edit_before_save(context={})
-        controller_issues_edit_before_save(context)
-      end
+      # 작업 일정·작업자 자동 기록은 Issue#assign_tx_auto_date_fields (before_save 콜백)에서
+      # 처리한다. 컨트롤러 훅으로는 메일/커밋/일괄수정 등 일부 저장 경로를 놓치기 때문이다.
+      # (RedmineTxAutoDate::Patches::IssuePatch 참조)
     end
 end
