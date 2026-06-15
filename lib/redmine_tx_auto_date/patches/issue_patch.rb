@@ -95,17 +95,37 @@ module RedmineTxAutoDate
         new_end_time    = nil
         new_confirm_time = nil
 
-        tx_auto_date_journals_in_order.each do |journal|
+        ordered_journals = tx_auto_date_journals_in_order
+        first_assigned_to_detail = ordered_journals.filter_map do |journal|
+          journal.visible_details.find { |d| d.prop_key == 'assigned_to_id' }
+        end.first
+        replay_assigned_to_id =
+          if first_assigned_to_detail
+            tx_auto_date_integer_or_nil(first_assigned_to_detail.old_value)
+          else
+            self.assigned_to_id
+          end
+
+        ordered_journals.each do |journal|
           visible_details = journal.visible_details
           detail_assigned_to_id = visible_details.find { |d| d.prop_key == 'assigned_to_id' }
           detail_status_id = visible_details.find { |d| d.prop_key == 'status_id' }
-          next unless detail_status_id
+
+          assigned_to_before_journal = replay_assigned_to_id
+          assigned_to_after_journal =
+            if detail_assigned_to_id
+              tx_auto_date_integer_or_nil(detail_assigned_to_id.value)
+            else
+              replay_assigned_to_id
+            end
+
+          unless detail_status_id
+            replay_assigned_to_id = assigned_to_after_journal if detail_assigned_to_id
+            next
+          end
 
           old_status_id = detail_status_id.old_value.to_i
           new_status_id = detail_status_id.value.to_i
-
-          _new_assigned_to_id = detail_assigned_to_id&.value&.to_i
-          _old_assigned_to_id = detail_assigned_to_id&.old_value&.to_i
 
           started = !IssueStatus.is_in_progress?(old_status_id) && IssueStatus.is_in_progress?(new_status_id)
           entered_review = !IssueStatus.is_in_review?(old_status_id) && IssueStatus.is_in_review?(new_status_id)
@@ -116,7 +136,7 @@ module RedmineTxAutoDate
           if started
             new_begin_time = journal.created_on if new_begin_time.nil?
             if new_worker_id.nil?
-              new_worker_id = detail_assigned_to_id ? _new_assigned_to_id : journal.user_id
+              new_worker_id = assigned_to_after_journal
             end
           end
 
@@ -132,10 +152,12 @@ module RedmineTxAutoDate
               if is_directly_implemented
                 new_worker_id = journal.user_id
               elsif detail_assigned_to_id
-                new_worker_id = _old_assigned_to_id
+                new_worker_id = assigned_to_before_journal
               end
             end
           end
+
+          replay_assigned_to_id = assigned_to_after_journal if detail_assigned_to_id
         end
 
         # 현재 진행/검수중(완료 전)이면 보정
@@ -144,7 +166,7 @@ module RedmineTxAutoDate
           new_begin_time = self.created_on if new_begin_time.nil?
           new_end_time = nil
           if new_confirm_time.nil? && IssueStatus.is_in_review?(self.status_id)
-            new_confirm_time = self.confirm_time
+            new_confirm_time = self.confirm_time || self.created_on
           end
         end
 
@@ -200,6 +222,10 @@ module RedmineTxAutoDate
       # 저널을 시간순(동시각이면 id순)으로 정렬해 반환한다.
       def tx_auto_date_journals_in_order
         journals.to_a.sort_by { |j| [j.created_on, j.id.to_i] }
+      end
+
+      def tx_auto_date_integer_or_nil(value)
+        value.present? ? value.to_i : nil
       end
     end
   end

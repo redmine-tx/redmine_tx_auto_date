@@ -423,6 +423,43 @@ class RedmineTxAutoDateWorkerSequenceTest < ActiveSupport::TestCase
     assert_time_equal t10, issue.confirm_time
   end
 
+  # 상태만 진행중으로 바뀐 저널도 콜백과 같이 당시 담당자를 작업자로 사용해야 한다.
+  def test_recalculation_status_only_progress_uses_assignee_not_journal_actor
+    started_at = Time.zone.local(2026, 5, 12, 9, 0, 0)
+    issue = build_issue(status: @in_progress_status, assigned_to: @developer, done_ratio: 0)
+
+    add_journal(issue, user: @planner, created_on: started_at,
+                status: [@new_status, @in_progress_status])
+
+    issue.update_auto_date!
+    issue.reload
+
+    assert_equal @developer.id, issue.worker_id
+    assert_time_equal started_at, issue.begin_time
+    assert_nil issue.end_time
+  end
+
+  # 진행 진입 저널에 담당자 변경 detail이 없고 나중에 QA로 핸드오프돼도
+  # 재계산은 저널 actor가 아니라 당시 담당자(개발자)를 보존해야 한다.
+  def test_recalculation_replays_assignee_when_status_only_progress_is_later_handed_off
+    started_at = Time.zone.local(2026, 5, 12, 9, 0, 0)
+    implemented_at = Time.zone.local(2026, 5, 12, 11, 0, 0)
+    issue = build_issue(status: @implemented_status, assigned_to: @qa, done_ratio: 100)
+
+    add_journal(issue, user: @planner, created_on: started_at,
+                status: [@new_status, @in_progress_status])
+    add_journal(issue, user: @developer, created_on: implemented_at,
+                status: [@in_progress_status, @implemented_status],
+                assigned_to: [@developer, @qa])
+
+    issue.update_auto_date!
+    issue.reload
+
+    assert_equal @developer.id, issue.worker_id
+    assert_time_equal started_at, issue.begin_time
+    assert_time_equal implemented_at, issue.end_time
+  end
+
   # 결함 ③: done_ratio == 0 이어도 진행중 이슈의 시작시간/작업자는 보존돼야 한다.
   def test_recalculation_in_progress_with_zero_done_ratio_is_preserved
     started_at = Time.zone.local(2026, 5, 12, 9, 0, 0)
@@ -516,6 +553,37 @@ class RedmineTxAutoDateWorkerSequenceTest < ActiveSupport::TestCase
     assert_equal @developer.id, issue.worker_id, '작성자가 작업자로 귀속돼야 함(담당자 qa 아님)'
     assert_time_equal created_at, issue.begin_time
     assert_time_equal created_at, issue.end_time
+  end
+
+  # 상태 변경 저널 없이 검수중으로 존재하는 이슈도 콜백과 같이 검토 시작시각을 백필한다.
+  def test_recalculation_directly_in_review_without_journal_sets_confirm_time
+    created_at = Time.zone.local(2026, 5, 12, 9, 0, 0)
+    issue = Issue.generate!(
+      project_id: 1,
+      tracker_id: 1,
+      status_id: @review_status.id,
+      author_id: @developer.id,
+      done_ratio: 0,
+      created_on: created_at,
+      updated_on: created_at
+    )
+    issue.update_columns(
+      assigned_to_id: @qa.id,
+      worker_id: nil,
+      begin_time: nil,
+      end_time: nil,
+      confirm_time: nil,
+      created_on: created_at
+    )
+    issue.reload
+
+    issue.update_auto_date!
+    issue.reload
+
+    assert_equal @qa.id, issue.worker_id
+    assert_time_equal created_at, issue.begin_time
+    assert_nil issue.end_time
+    assert_time_equal created_at, issue.confirm_time
   end
 
   private
